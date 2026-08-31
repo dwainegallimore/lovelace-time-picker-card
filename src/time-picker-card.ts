@@ -177,6 +177,7 @@ const CARD_STYLES = `
   .tpc-wheel-scroll {
     height: calc(var(--tpc-item-height) * 3);
     overflow-y: scroll;
+    overscroll-behavior: contain;
     scroll-snap-type: y mandatory;
     scrollbar-width: none;
     padding: var(--tpc-item-height) 0;
