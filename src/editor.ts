@@ -1,9 +1,6 @@
-import { HomeAssistant, LovelaceCardEditor } from 'custom-card-helpers';
-import { html, LitElement, TemplateResult } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
-import { TimePickerCardConfig } from './types';
+import { HomeAssistant, LovelaceCardEditor, TimePickerCardConfig } from './types';
 
-const NAME_TO_LABEL_MAP = {
+const NAME_TO_LABEL_MAP: Record<string, string> = {
   entity: 'input_datetime entity id',
   name: 'Name',
   hour_step: 'Hour step',
@@ -114,45 +111,64 @@ const SCHEMA = [
   },
 ];
 
-@customElement('time-picker-card-editor')
-export class TimePickerCardEditor extends LitElement implements LovelaceCardEditor {
-  private static readonly CONFIG_CHANGED_EVENT = 'config-changed';
+interface HaFormElement extends HTMLElement {
+  hass?: HomeAssistant;
+  data?: unknown;
+  schema?: unknown;
+  computeLabel?: (schema: { name: string }) => string;
+}
 
-  @property({ type: Object }) hass!: HomeAssistant;
-  @property() private config!: TimePickerCardConfig;
+/**
+ * Wraps Home Assistant's own `<ha-form>` element imperatively instead of through Lit,
+ * so the visual editor keeps its full functionality (entity/action pickers, expandables)
+ * without pulling in the `lit` package.
+ */
+export class TimePickerCardEditor extends HTMLElement implements LovelaceCardEditor {
+  private _hass?: HomeAssistant;
+  private _config?: TimePickerCardConfig;
+  private _form?: HaFormElement;
 
-  private computeLabel({ name }): string {
-    return NAME_TO_LABEL_MAP[name] || name;
+  set hass(hass: HomeAssistant) {
+    this._hass = hass;
+    if (this._form) {
+      this._form.hass = hass;
+    }
   }
 
-  private valueChanged(ev: CustomEvent): void {
-    const newConfig = { ...this.config, ...ev.detail.value };
-    this.dispatch(newConfig);
+  get hass(): HomeAssistant | undefined {
+    return this._hass;
   }
 
-  render(): TemplateResult {
-    return html`
-      <ha-form
-        .hass=${this.hass}
-        .data=${this.config}
-        .schema=${SCHEMA}
-        .computeLabel=${this.computeLabel}
-        @value-changed=${this.valueChanged}
-      ></ha-form>
-    `;
+  setConfig(config: TimePickerCardConfig): void {
+    this._config = config;
+    if (this._form) {
+      this._form.data = config;
+    }
   }
 
-  setConfig(config): void {
-    this.config = config;
-  }
+  connectedCallback(): void {
+    if (this._form) {
+      return;
+    }
 
-  private dispatch(config: TimePickerCardConfig): void {
-    const event = new CustomEvent(TimePickerCardEditor.CONFIG_CHANGED_EVENT, {
-      bubbles: true,
-      composed: true,
-      detail: { config },
-    });
+    const form = document.createElement('ha-form') as HaFormElement;
+    form.hass = this._hass;
+    form.data = this._config;
+    form.schema = SCHEMA;
+    form.computeLabel = ({ name }: { name: string }): string => NAME_TO_LABEL_MAP[name] || name;
+    form.addEventListener('value-changed', ((ev: CustomEvent) => {
+      ev.stopPropagation();
+      const newConfig = { ...this._config, ...ev.detail.value } as TimePickerCardConfig;
+      this._config = newConfig;
+      form.data = newConfig;
+      this.dispatchEvent(
+        new CustomEvent('config-changed', { bubbles: true, composed: true, detail: { config: newConfig } })
+      );
+    }) as EventListener);
 
-    this.dispatchEvent(event);
+    this._form = form;
+    this.appendChild(form);
   }
 }
+
+customElements.define('time-picker-card-editor', TimePickerCardEditor);

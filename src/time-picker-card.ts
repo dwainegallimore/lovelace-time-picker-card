@@ -1,18 +1,4 @@
-import {
-  ActionHandlerEvent,
-  computeDomain,
-  handleAction,
-  hasAction,
-  HomeAssistant,
-  LovelaceCard,
-} from 'custom-card-helpers';
-import { HassEntity } from 'home-assistant-js-websocket';
-import { css, CSSResult, html, LitElement, TemplateResult } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
-import { ClassInfo, classMap } from 'lit/directives/class-map.js';
-import { actionHandler } from './action-handler-directive';
-import './components/time-period.component';
-import './components/time-unit.component';
+import { bindActionHandler, computeDomain } from './actions';
 import {
   CARD_SIZE,
   CARD_VERSION,
@@ -22,15 +8,17 @@ import {
   DEFAULT_LAYOUT_HOUR_MODE,
   DEFAULT_LAYOUT_NAME,
   DEFAULT_MINUTE_STEP,
+  DEFAULT_SECOND_STEP,
   ENTITY_DOMAIN,
 } from './const';
 import './editor';
+import { createErrorCard } from './error-card';
 import { Hour } from './models/hour';
 import { Minute } from './models/minute';
 import { Second } from './models/second';
 import { Time } from './models/time';
-import { Partial } from './partials';
-import { Layout, Period, TimePickerCardConfig, TimePickerHideConfig } from './types';
+import { Direction, HassEntity, HomeAssistant, Layout, LovelaceCard, LovelaceCardEditor, Period, TimePickerCardConfig } from './types';
+import { generateWheelRange, TimeWheel } from './wheel';
 
 console.info(
   `%c  TIME-PICKER-CARD  \n%c  Version ${CARD_VERSION}    `,
@@ -45,344 +33,204 @@ window.customCards.push({
   description: 'A Time Picker card for setting the time value of Input Datetime entities.',
 });
 
-@customElement('time-picker-card')
-export class TimePickerCard extends LitElement implements LovelaceCard {
-  @property({ type: Object }) hass!: HomeAssistant;
-  @property() private config!: TimePickerCardConfig;
-  @property() private time!: Time;
-  @property() private period!: Period;
-
-  private bounce: number | undefined;
-
-  private get entity(): HassEntity | undefined {
-    return this.hass.states[this.config.entity];
+const CARD_STYLES = `
+  :host {
+    --tpc-elements-background-color: var(--time-picker-elements-background-color, var(--primary-color));
+    --tpc-control-padding: var(--time-picker-control-padding, 8px);
+    --tpc-icon-color: var(--time-picker-icon-color, var(--primary-text-color));
+    --tpc-text-color: var(--time-picker-text-color, #fff);
+    --tpc-accent-color: var(--time-picker-accent-color, var(--primary-color));
+    --tpc-off-color: var(--time-picker-off-color, var(--disabled-text-color));
+    --tpc-border-radius: var(--time-picker-border-radius, var(--ha-card-border-radius, 12px));
+    --tpc-item-height: 44px;
   }
 
-  private get isEmbedded(): boolean {
-    return this.config.layout?.embedded === true;
+  * { box-sizing: border-box; }
+
+  ha-card {
+    overflow: hidden;
+    border-radius: var(--tpc-border-radius);
   }
 
-  private get hasNameInHeader(): boolean {
-    return (
-      Boolean(this.name) &&
-      Boolean(this.config.hide?.name) === false &&
-      this.config.layout?.name !== Layout.Name.INSIDE &&
-      Boolean(this.config.layout?.embedded) === false // embedded layout disables name in header
-    );
+  ha-card.embedded {
+    box-shadow: none;
+    border: none;
+    background: transparent;
   }
 
-  private get hasNameInside(): boolean {
-    return (
-      Boolean(this.name) &&
-      (this.config.layout?.name === Layout.Name.INSIDE || Boolean(this.config.layout?.embedded))
-    );
+  .tpc-header {
+    padding: 16px;
+    color: var(--tpc-text-color);
+    background: var(--tpc-elements-background-color);
+    font-size: 1em;
+    font-weight: 500;
+    text-align: center;
+    user-select: none;
   }
 
-  private get name(): string | undefined {
-    return this.config.name || this.entity?.attributes.friendly_name;
+  ha-card.thin .tpc-header { padding: 8px; }
+
+  .tpc-row {
+    display: flex;
+    align-items: center;
+    padding: 20px 16px;
   }
 
-  private get shouldShowPeriod(): boolean {
-    return this.config.hour_mode === 12;
+  ha-card.thin .tpc-row { padding: 6px !important; }
+  .tpc-row.embedded { padding: 0; }
+  .tpc-row.with-header-name { padding: 12px 16px 20px; }
+
+  .tpc-nested-name {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-right: 16px;
+    user-select: none;
   }
 
-  private get layoutAlign(): Layout.AlignControls {
-    return this.config.layout?.align_controls ?? DEFAULT_LAYOUT_ALIGN_CONTROLS;
+  .tpc-nested-name state-badge { color: var(--tpc-icon-color); }
+  .tpc-nested-name span { color: var(--primary-text-color); font-weight: 500; }
+
+  .tpc-content {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex: 1 0 auto;
   }
 
-  private get haCardClass(): ClassInfo {
-    return {
-      embedded: this.isEmbedded,
-      thin: this.config.layout?.thin === true,
-    };
+  .tpc-content.layout-left { justify-content: flex-start; }
+  .tpc-content.layout-center { justify-content: center; }
+  .tpc-content.layout-right { justify-content: flex-end; }
+
+  .tpc-wheel-group {
+    display: flex;
+    align-items: stretch;
+    position: relative;
+    border-radius: calc(var(--tpc-border-radius) * 0.6);
+    background: var(--secondary-background-color, rgba(127, 127, 127, 0.08));
+    padding: 0 6px;
   }
 
-  private get rowClass(): ClassInfo {
-    return {
-      'time-picker-row': true,
-      'with-header-name': this.hasNameInHeader,
-      embedded: this.isEmbedded,
-    };
+  .tpc-wheel-group::before {
+    content: '';
+    position: absolute;
+    left: 6px;
+    right: 6px;
+    top: 50%;
+    height: var(--tpc-item-height);
+    transform: translateY(-50%);
+    background: rgba(127, 127, 127, 0.16);
+    background: color-mix(in srgb, var(--tpc-accent-color) 14%, transparent);
+    border-radius: 10px;
+    pointer-events: none;
   }
 
-  private get contentClass(): ClassInfo {
-    return {
-      'time-picker-content': true,
-      [`layout-${this.layoutAlign}`]: true,
-    };
+  .tpc-wheel {
+    position: relative;
+    width: 2.2em;
+    height: calc(var(--tpc-item-height) * 3);
+    outline: none;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 32%, black 68%, transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0%, black 32%, black 68%, transparent 100%);
   }
 
-  private handleAction(ev: ActionHandlerEvent): void {
-    handleAction(this, this.hass, this.config, ev.detail.action!);
+  .tpc-wheel:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--tpc-accent-color);
+    border-radius: 8px;
   }
 
-  private renderHeaderName(title: string): TemplateResult {
-    return html`<div
-      class="time-picker-header"
-      @action=${this.handleAction}
-      .actionHandler="${actionHandler({
-        hasHold: hasAction(this.config.hold_action),
-        hasDoubleClick: hasAction(this.config.double_tap_action),
-      })}"
-    >
-      ${title}
-    </div>`;
+  .tpc-wheel-scroll {
+    height: 100%;
+    overflow-y: scroll;
+    scroll-snap-type: y mandatory;
+    scrollbar-width: none;
+    padding: var(--tpc-item-height) 0;
   }
 
-  private renderNestedName(
-    name: string,
-    entity: HassEntity,
-    hide?: TimePickerHideConfig
-  ): TemplateResult {
-    const icon = html`<state-badge
-      class="entity-icon"
-      .stateObj=${entity}
-      @action=${this.handleAction}
-      .actionHandler="${actionHandler({
-        hasHold: hasAction(this.config.hold_action),
-        hasDoubleClick: hasAction(this.config.double_tap_action),
-      })}"
-    ></state-badge>`;
-    const label = html`<div
-      class="entity-name-inside"
-      @action=${this.handleAction}
-      .actionHandler="${actionHandler({
-        hasHold: hasAction(this.config!.hold_action),
-        hasDoubleClick: hasAction(this.config.double_tap_action),
-      })}"
-    >
-      ${name}
-    </div>`;
+  .tpc-wheel-scroll::-webkit-scrollbar { display: none; }
 
-    const visibleElements = [
-      { element: icon, visible: !hide?.icon },
-      { element: label, visible: !hide?.name },
-    ]
-      .filter(({ visible }) => visible)
-      .map(({ element }) => element);
-
-    return html`${visibleElements}`;
+  .tpc-wheel-item {
+    height: var(--tpc-item-height);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    scroll-snap-align: center;
+    font-size: 1.6rem;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--primary-text-color);
+    transition: color 0.15s ease-out;
+    user-select: none;
+    cursor: pointer;
+    will-change: transform, opacity;
   }
 
-  render(): TemplateResult | null {
-    if (!this.entity) {
-      return Partial.error('Entity not found', this.config);
-    }
-
-    if (computeDomain(this.entity.entity_id) !== ENTITY_DOMAIN) {
-      return Partial.error(`You must set an ${ENTITY_DOMAIN} entity`, this.config);
-    }
-
-    if (!this.entity.attributes.has_time) {
-      return Partial.error(
-        `You must set an ${ENTITY_DOMAIN} entity that sets has_time: true`,
-        this.config
-      );
-    }
-
-    const { hour, minute, second } = this.entity!.attributes;
-    const hourInstance = new Hour(hour, this.config.hour_step, this.config.hour_mode);
-    const minuteInstance = new Minute(minute, this.config.minute_step);
-    const secondInstance = new Second(second, this.config.second_step);
-    this.time = new Time(hourInstance, minuteInstance, secondInstance, this.config.link_values);
-    this.period = hourInstance.value >= 12 ? Period.PM : Period.AM;
-
-    return html`
-      <ha-card class=${classMap(this.haCardClass)}>
-        ${this.hasNameInHeader ? this.renderHeaderName(this.name!) : ''}
-        <div class=${classMap(this.rowClass)}>
-          ${this.hasNameInside
-            ? this.renderNestedName(this.name!, this.entity, this.config.hide)
-            : ''}
-
-          <div class=${classMap(this.contentClass)}>
-            <time-unit
-              .unit=${this.time.hour}
-              @stepChange=${this.onHourStepChange}
-              @update=${this.debouncedCallHassService}
-            ></time-unit>
-            <div class="time-separator">:</div>
-            <time-unit
-              .unit=${this.time.minute}
-              @stepChange=${this.onMinuteStepChange}
-              @update=${this.debouncedCallHassService}
-            ></time-unit>
-            ${this.config.hide?.seconds === false
-              ? html`<div class="time-separator">:</div>
-                  <time-unit
-                    .unit=${this.time.second}
-                    @stepChange=${this.onSecondStepChange}
-                    @update=${this.debouncedCallHassService}
-                  ></time-unit>`
-              : ''}
-            ${this.shouldShowPeriod
-              ? html`<time-period
-                  .period=${this.period}
-                  .mode=${this.config.layout?.hour_mode ?? DEFAULT_LAYOUT_HOUR_MODE}
-                  @toggle=${this.onPeriodToggle}
-                ></time-period>`
-              : ''}
-          </div>
-        </div>
-      </ha-card>
-    `;
+  .tpc-wheel-item.is-center {
+    color: var(--tpc-accent-color);
+    font-weight: 700;
   }
 
-  setConfig(config): void {
-    if (!config) {
-      throw new Error('Invalid configuration');
-    }
-
-    if (!config.entity) {
-      throw new Error('You must set an entity');
-    }
-
-    if (config.hour_mode && config.hour_mode !== 12 && config.hour_mode !== 24) {
-      throw new Error('Invalid hour_mode: select either 12 or 24');
-    }
-
-    this.config = config;
+  .tpc-separator {
+    font-size: 1.6rem;
+    font-weight: 600;
+    color: var(--secondary-text-color);
+    padding-bottom: 2px;
   }
 
-  getCardSize(): number {
-    return CARD_SIZE;
+  .tpc-period {
+    position: relative;
+    display: flex;
+    border-radius: 999px;
+    background: var(--tpc-off-color);
+    padding: 3px;
+    overflow: hidden;
   }
 
-  private onPeriodToggle(): void {
-    this.time.hour.togglePeriod();
-    this.debouncedCallHassService();
+  .tpc-period button {
+    position: relative;
+    z-index: 1;
+    border: none;
+    background: transparent;
+    font: inherit;
+    font-weight: 600;
+    font-size: 0.85rem;
+    letter-spacing: 0.02em;
+    padding: 8px 14px;
+    border-radius: 999px;
+    color: var(--tpc-text-color);
+    cursor: pointer;
+    transition: color 0.25s ease, transform 0.15s ease;
   }
 
-  private onHourStepChange(event: CustomEvent): void {
-    this.time.hourStep(event.detail.direction);
-    this.debouncedCallHassService();
+  .tpc-period button:active { transform: scale(0.94); }
+
+  .tpc-period.single button { display: none; }
+  .tpc-period.single button.active { display: block; }
+
+  .tpc-period-thumb {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 3px;
+    width: calc(50% - 3px);
+    border-radius: 999px;
+    background: var(--tpc-accent-color);
+    transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    z-index: 0;
   }
 
-  private onMinuteStepChange(event: CustomEvent): void {
-    this.time.minuteStep(event.detail.direction);
-    this.debouncedCallHassService();
-  }
+  .tpc-period.pm .tpc-period-thumb { transform: translateX(100%); }
 
-  private onSecondStepChange(event: CustomEvent): void {
-    this.time.secondStep(event.detail.direction);
-    this.debouncedCallHassService();
-  }
+  .entity-icon { cursor: pointer; }
+`;
 
-  private debouncedCallHassService(): void {
-    if (this.config.delay) {
-      clearTimeout(this.bounce);
-      this.bounce = setTimeout(() => this.callHassService(), this.config.delay, this);
-    } else {
-      this.callHassService();
-    }
-  }
+interface PeriodElements {
+  wrap: HTMLDivElement;
+  single?: HTMLButtonElement;
+}
 
-  private callHassService(): Promise<void> {
-    if (!this.hass) {
-      throw new Error('Unable to update datetime');
-    }
-
-    return this.hass.callService(ENTITY_DOMAIN, 'set_datetime', {
-      entity_id: this.entity!.entity_id,
-      time: this.time.value,
-    });
-  }
-
-  static get styles(): CSSResult {
-    return css`
-      :host {
-        --tpc-elements-background-color: var(
-          --time-picker-elements-background-color,
-          var(--primary-color)
-        );
-
-        --tpc-control-padding: var(--time-picker-control-padding, 8px);
-
-        --tpc-icon-color: var(--time-picker-icon-color, var(--primary-text-color));
-        --tpc-text-color: var(--time-picker-text-color, #fff);
-        --tpc-accent-color: var(--time-picker-accent-color, var(--primary-color));
-        --tpc-off-color: var(--time-picker-off-color, var(--disabled-text-color));
-
-        --tpc-border-radius: var(--time-picker-border-radius, var(--ha-card-border-radius, 4px));
-      }
-
-      ha-card {
-        overflow: auto;
-      }
-
-      ha-card.embedded {
-        box-shadow: none;
-        border: none;
-        background: transparent;
-      }
-
-      .time-picker-header {
-        padding: 16px;
-        color: var(--tpc-text-color);
-        background-color: var(--tpc-elements-background-color);
-        border-top-left-radius: var(--tpc-border-radius);
-        border-top-right-radius: var(--tpc-border-radius);
-        font-size: 1em;
-        text-align: center;
-      }
-
-      .thin > .time-picker-header {
-        padding: 4px;
-      }
-
-      .time-picker-row {
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-        padding: 16px;
-      }
-
-      .thin .time-picker-row {
-        padding: 0 !important ;
-      }
-
-      .time-picker-row.embedded {
-        padding: 0;
-      }
-
-      .time-picker-row.with-header-name {
-        padding: 8px 16px 16px;
-      }
-
-      .time-picker-content {
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-        flex: 1 0 auto;
-      }
-
-      .time-picker-content.layout-left {
-        justify-content: flex-start;
-      }
-
-      .time-picker-content.layout-center {
-        justify-content: center;
-      }
-
-      .time-picker-content.layout-right {
-        justify-content: flex-end;
-      }
-
-      .entity-icon {
-        cursor: pointer;
-      }
-
-      .entity-name-inside {
-        margin-left: 16px;
-        cursor: pointer;
-      }
-    `;
-  }
-
-  static getStubConfig(
-    _: HomeAssistant,
-    entities: Array<string>
-  ): Omit<TimePickerCardConfig, 'type'> {
+export class TimePickerCard extends HTMLElement implements LovelaceCard {
+  static getStubConfig(_hass: HomeAssistant, entities: Array<string>): Omit<TimePickerCardConfig, 'type'> {
     const datetimeEntity = entities.find((entityId) => computeDomain(entityId) === ENTITY_DOMAIN);
 
     return {
@@ -401,7 +249,421 @@ export class TimePickerCard extends LitElement implements LovelaceCard {
     };
   }
 
-  static getConfigElement(): LovelaceCard {
-    return document.createElement('time-picker-card-editor') as LovelaceCard;
+  static getConfigElement(): LovelaceCardEditor {
+    return document.createElement('time-picker-card-editor') as unknown as LovelaceCardEditor;
+  }
+
+  private _hass!: HomeAssistant;
+  private _config!: TimePickerCardConfig;
+  private _time?: Time;
+  private _period: Period = Period.AM;
+  private _bounce?: number;
+  private _built = false;
+
+  private readonly _root: ShadowRoot;
+  private readonly _content: HTMLDivElement;
+
+  private _headerEl?: HTMLElement;
+  private _nameLabelEl?: HTMLElement;
+  private _badgeEl?: HTMLElement & { stateObj?: HassEntity };
+  private _hourWheel?: TimeWheel;
+  private _minuteWheel?: TimeWheel;
+  private _secondWheel?: TimeWheel;
+  private _periodEls?: PeriodElements;
+
+  constructor() {
+    super();
+    this._root = this.attachShadow({ mode: 'open' });
+
+    const style = document.createElement('style');
+    style.textContent = CARD_STYLES;
+    this._root.appendChild(style);
+
+    this._content = document.createElement('div');
+    this._root.appendChild(this._content);
+  }
+
+  setConfig(config: TimePickerCardConfig): void {
+    if (!config) {
+      throw new Error('Invalid configuration');
+    }
+
+    if (!config.entity) {
+      throw new Error('You must set an entity');
+    }
+
+    if (config.hour_mode && config.hour_mode !== 12 && config.hour_mode !== 24) {
+      throw new Error('Invalid hour_mode: select either 12 or 24');
+    }
+
+    this._config = config;
+    this._built = false;
+
+    if (this._hass) {
+      this._update();
+    }
+  }
+
+  set hass(hass: HomeAssistant) {
+    this._hass = hass;
+    if (this._config) {
+      this._update();
+    }
+  }
+
+  get hass(): HomeAssistant {
+    return this._hass;
+  }
+
+  getCardSize(): number {
+    return CARD_SIZE;
+  }
+
+  connectedCallback(): void {
+    if (this._config && this._hass) {
+      this._update();
+    }
+  }
+
+  private get _entity(): HassEntity | undefined {
+    return this._hass.states[this._config.entity];
+  }
+
+  private get _isEmbedded(): boolean {
+    return this._config.layout?.embedded === true;
+  }
+
+  private get _hasNameInHeader(): boolean {
+    return (
+      Boolean(this._name) &&
+      this._config.hide?.name !== true &&
+      this._config.layout?.name !== Layout.Name.INSIDE &&
+      this._config.layout?.embedded !== true
+    );
+  }
+
+  private get _hasNameInside(): boolean {
+    return (
+      Boolean(this._name) &&
+      (this._config.layout?.name === Layout.Name.INSIDE || Boolean(this._config.layout?.embedded))
+    );
+  }
+
+  private get _name(): string | undefined {
+    return this._config.name || this._entity?.attributes.friendly_name;
+  }
+
+  private get _shouldShowPeriod(): boolean {
+    return this._config.hour_mode === 12;
+  }
+
+  private get _layoutAlign(): Layout.AlignControls {
+    return this._config.layout?.align_controls ?? DEFAULT_LAYOUT_ALIGN_CONTROLS;
+  }
+
+  private _update(): void {
+    if (!this._built) {
+      this._build();
+    } else {
+      this._refreshValues();
+    }
+  }
+
+  private _build(): void {
+    const entity = this._entity;
+
+    if (!entity) {
+      this._showError('Entity not found');
+      return;
+    }
+
+    if (computeDomain(entity.entity_id) !== ENTITY_DOMAIN) {
+      this._showError(`You must set an ${ENTITY_DOMAIN} entity`);
+      return;
+    }
+
+    if (!entity.attributes.has_time) {
+      this._showError(`You must set an ${ENTITY_DOMAIN} entity that sets has_time: true`);
+      return;
+    }
+
+    const { hour, minute, second } = entity.attributes;
+    this._time = new Time(
+      new Hour(hour ?? 0, this._config.hour_step, this._config.hour_mode),
+      new Minute(minute ?? 0, this._config.minute_step),
+      new Second(second ?? 0, this._config.second_step),
+      this._config.link_values
+    );
+    this._period = this._time.hour.value >= 12 ? Period.PM : Period.AM;
+
+    this._content.innerHTML = '';
+    this._headerEl = undefined;
+    this._nameLabelEl = undefined;
+    this._badgeEl = undefined;
+    this._periodEls = undefined;
+
+    const card = document.createElement('ha-card');
+    card.classList.toggle('embedded', this._isEmbedded);
+    card.classList.toggle('thin', this._config.layout?.thin === true);
+
+    if (this._hasNameInHeader) {
+      card.appendChild(this._buildHeader());
+    }
+
+    const row = document.createElement('div');
+    row.className = 'tpc-row';
+    row.classList.toggle('with-header-name', this._hasNameInHeader);
+    row.classList.toggle('embedded', this._isEmbedded);
+
+    if (this._hasNameInside) {
+      row.appendChild(this._buildNestedName(entity));
+    }
+
+    const content = document.createElement('div');
+    content.className = `tpc-content layout-${this._layoutAlign}`;
+
+    const wheelGroup = document.createElement('div');
+    wheelGroup.className = 'tpc-wheel-group';
+
+    this._hourWheel = new TimeWheel({
+      label: 'Hour',
+      format: (value) => new Hour(value, 1, this._config.hour_mode).toString(),
+      onChange: (value) => this._onHourChange(value),
+    });
+    this._hourWheel.setValues(
+      generateWheelRange(0, 23, this._config.hour_step ?? DEFAULT_HOUR_STEP),
+      this._time.hour.value
+    );
+    wheelGroup.appendChild(this._hourWheel.element);
+    wheelGroup.appendChild(this._buildSeparator());
+
+    this._minuteWheel = new TimeWheel({
+      label: 'Minute',
+      format: (value) => (value < 10 ? `0${value}` : String(value)),
+      onChange: (value, carry, laps) => this._onMinuteChange(value, carry, laps),
+    });
+    this._minuteWheel.setValues(
+      generateWheelRange(0, 59, this._config.minute_step ?? DEFAULT_MINUTE_STEP),
+      this._time.minute.value
+    );
+    wheelGroup.appendChild(this._minuteWheel.element);
+
+    if (this._config.hide?.seconds === false) {
+      wheelGroup.appendChild(this._buildSeparator());
+      this._secondWheel = new TimeWheel({
+        label: 'Second',
+        format: (value) => (value < 10 ? `0${value}` : String(value)),
+        onChange: (value, carry, laps) => this._onSecondChange(value, carry, laps),
+      });
+      this._secondWheel.setValues(
+        generateWheelRange(0, 59, this._config.second_step ?? DEFAULT_SECOND_STEP),
+        this._time.second.value
+      );
+      wheelGroup.appendChild(this._secondWheel.element);
+    } else {
+      this._secondWheel = undefined;
+    }
+
+    content.appendChild(wheelGroup);
+
+    if (this._shouldShowPeriod) {
+      content.appendChild(this._buildPeriodToggle());
+    }
+
+    row.appendChild(content);
+    card.appendChild(row);
+    this._content.appendChild(card);
+    this._built = true;
+  }
+
+  private _refreshValues(): void {
+    const entity = this._entity;
+
+    if (!entity || computeDomain(entity.entity_id) !== ENTITY_DOMAIN || !entity.attributes.has_time) {
+      this._built = false;
+      this._build();
+      return;
+    }
+
+    if (!this._time) {
+      this._build();
+      return;
+    }
+
+    const { hour, minute, second } = entity.attributes;
+    this._time.hour.setStringValue(String(hour ?? 0));
+    this._time.minute.setStringValue(String(minute ?? 0));
+    this._time.second.setStringValue(String(second ?? 0));
+    this._period = this._time.hour.value >= 12 ? Period.PM : Period.AM;
+
+    this._hourWheel?.setValue(this._time.hour.value);
+    this._minuteWheel?.setValue(this._time.minute.value);
+    this._secondWheel?.setValue(this._time.second.value);
+    this._syncPeriodToggle();
+
+    if (this._headerEl) {
+      this._headerEl.textContent = this._name ?? '';
+    }
+    if (this._nameLabelEl) {
+      this._nameLabelEl.textContent = this._name ?? '';
+    }
+    if (this._badgeEl) {
+      this._badgeEl.stateObj = entity;
+    }
+  }
+
+  private _showError(message: string): void {
+    this._content.innerHTML = '';
+    this._content.appendChild(createErrorCard(message, this._config));
+    this._built = false;
+    this._time = undefined;
+  }
+
+  private _buildHeader(): HTMLElement {
+    const header = document.createElement('div');
+    header.className = 'tpc-header';
+    header.textContent = this._name ?? '';
+    bindActionHandler(header, () => ({ hass: this._hass, config: this._config }));
+    this._headerEl = header;
+    return header;
+  }
+
+  private _buildNestedName(entity: HassEntity): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'tpc-nested-name';
+    bindActionHandler(wrap, () => ({ hass: this._hass, config: this._config }));
+
+    if (!this._config.hide?.icon) {
+      const badge = document.createElement('state-badge') as HTMLElement & { stateObj?: HassEntity };
+      badge.classList.add('entity-icon');
+      badge.stateObj = entity;
+      wrap.appendChild(badge);
+      this._badgeEl = badge;
+    }
+
+    if (!this._config.hide?.name) {
+      const label = document.createElement('span');
+      label.textContent = this._name ?? '';
+      wrap.appendChild(label);
+      this._nameLabelEl = label;
+    }
+
+    return wrap;
+  }
+
+  private _buildSeparator(): HTMLElement {
+    const sep = document.createElement('div');
+    sep.className = 'tpc-separator';
+    sep.textContent = ':';
+    return sep;
+  }
+
+  private _buildPeriodToggle(): HTMLElement {
+    const mode = this._config.layout?.hour_mode ?? DEFAULT_LAYOUT_HOUR_MODE;
+    const wrap = document.createElement('div');
+    wrap.className = `tpc-period ${mode}`;
+
+    if (mode === 'single') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'active';
+      btn.addEventListener('click', () => this._onPeriodToggle());
+      wrap.appendChild(btn);
+      this._periodEls = { wrap, single: btn };
+    } else {
+      const thumb = document.createElement('span');
+      thumb.className = 'tpc-period-thumb';
+
+      const amBtn = document.createElement('button');
+      amBtn.type = 'button';
+      amBtn.textContent = 'AM';
+      amBtn.addEventListener('click', () => this._onPeriodToggle());
+
+      const pmBtn = document.createElement('button');
+      pmBtn.type = 'button';
+      pmBtn.textContent = 'PM';
+      pmBtn.addEventListener('click', () => this._onPeriodToggle());
+
+      wrap.append(thumb, amBtn, pmBtn);
+      this._periodEls = { wrap };
+    }
+
+    this._syncPeriodToggle();
+    return wrap;
+  }
+
+  private _syncPeriodToggle(): void {
+    if (!this._periodEls) {
+      return;
+    }
+
+    this._periodEls.wrap.classList.toggle('pm', this._period === Period.PM);
+
+    if (this._periodEls.single) {
+      this._periodEls.single.textContent = this._period;
+    }
+  }
+
+  private _onHourChange(value: number): void {
+    this._time!.hour.setStringValue(String(value));
+    this._period = this._time!.hour.value >= 12 ? Period.PM : Period.AM;
+    this._syncPeriodToggle();
+    this._debouncedCallHassService();
+  }
+
+  private _onMinuteChange(value: number, carry: 'up' | 'down' | null, laps: number): void {
+    if (this._config.link_values && carry) {
+      for (let i = 0; i < laps; i++) {
+        this._time!.hourStep(carry === 'up' ? Direction.UP : Direction.DOWN);
+      }
+      this._hourWheel?.setValue(this._time!.hour.value);
+      this._period = this._time!.hour.value >= 12 ? Period.PM : Period.AM;
+      this._syncPeriodToggle();
+    }
+
+    this._time!.minute.setStringValue(String(value));
+    this._debouncedCallHassService();
+  }
+
+  private _onSecondChange(value: number, carry: 'up' | 'down' | null, laps: number): void {
+    if (this._config.link_values && carry) {
+      for (let i = 0; i < laps; i++) {
+        this._time!.minute.stepUpdate(carry === 'up' ? Direction.UP : Direction.DOWN, 1);
+      }
+      this._minuteWheel?.setValue(this._time!.minute.value);
+    }
+
+    this._time!.second.setStringValue(String(value));
+    this._debouncedCallHassService();
+  }
+
+  private _onPeriodToggle(): void {
+    this._time!.hour.togglePeriod();
+    this._period = this._time!.hour.value >= 12 ? Period.PM : Period.AM;
+    this._syncPeriodToggle();
+    this._hourWheel?.setValue(this._time!.hour.value);
+    this._debouncedCallHassService();
+  }
+
+  private _debouncedCallHassService(): void {
+    if (this._config.delay) {
+      window.clearTimeout(this._bounce);
+      this._bounce = window.setTimeout(() => this._callHassService(), this._config.delay);
+    } else {
+      this._callHassService();
+    }
+  }
+
+  private _callHassService(): Promise<void> {
+    if (!this._hass || !this._time) {
+      throw new Error('Unable to update datetime');
+    }
+
+    return this._hass.callService(ENTITY_DOMAIN, 'set_datetime', {
+      entity_id: this._config.entity,
+      time: this._time.value,
+    });
   }
 }
+
+customElements.define('time-picker-card', TimePickerCard);

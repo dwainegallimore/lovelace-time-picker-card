@@ -40,7 +40,11 @@ export abstract class TimeUnit {
    * @param direction
    */
   stepUpdate(direction: Direction, step: number = this._step): void {
-    direction === Direction.UP ? this.increment(step) : this.decrement(step);
+    if (direction === Direction.UP) {
+      this.increment(step);
+    } else {
+      this.decrement(step);
+    }
   }
 
   toString(): string {

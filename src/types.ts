@@ -1,4 +1,59 @@
-import { ActionConfig, LovelaceCardConfig } from 'custom-card-helpers';
+/**
+ * Minimal local re-declarations of the Home Assistant frontend types this card needs.
+ * These replace `custom-card-helpers` / `home-assistant-js-websocket` so the card ships
+ * with zero runtime dependencies - Home Assistant's own frontend defines the real
+ * `hass`, `ha-card`, `ha-form`, `state-badge`, `hui-error-card`, etc. at runtime.
+ */
+
+export interface HassEntity {
+  entity_id: string;
+  state: string;
+  attributes: {
+    friendly_name?: string;
+    has_time?: boolean;
+    hour?: number;
+    minute?: number;
+    second?: number;
+    [key: string]: unknown;
+  };
+}
+
+export interface HomeAssistant {
+  states: Record<string, HassEntity>;
+  callService: (domain: string, service: string, data?: Record<string, unknown>) => Promise<void>;
+  [key: string]: unknown;
+}
+
+export interface ActionConfig {
+  action: 'more-info' | 'toggle' | 'navigate' | 'url' | 'call-service' | 'perform-action' | 'none' | 'assist';
+  entity?: string;
+  navigation_path?: string;
+  url_path?: string;
+  service?: string;
+  perform_action?: string;
+  service_data?: Record<string, unknown>;
+  data?: Record<string, unknown>;
+  target?: Record<string, unknown>;
+  confirmation?: unknown;
+}
+
+export interface LovelaceCardConfig {
+  type: string;
+  [key: string]: unknown;
+}
+
+export interface LovelaceCard extends HTMLElement {
+  hass?: HomeAssistant;
+  isPanel?: boolean;
+  editMode?: boolean;
+  getCardSize(): number | Promise<number>;
+  setConfig(config: LovelaceCardConfig): void;
+}
+
+export interface LovelaceCardEditor extends HTMLElement {
+  hass?: HomeAssistant;
+  setConfig(config: LovelaceCardConfig): void;
+}
 
 export interface TimePickerCardConfig extends LovelaceCardConfig {
   entity: string;

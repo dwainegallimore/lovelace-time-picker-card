@@ -13,6 +13,8 @@ This is a Time Picker Card for [Home Assistant](https://www.home-assistant.io/)'
 
 Requires an [Input Datetime](https://www.home-assistant.io/integrations/input_datetime/) that has time (`has_time: true`).
 
+**v2** is a ground-up, dependency-free rewrite: no `lit`, no `custom-card-helpers`, no runtime dependencies at all - just a small native Web Component. The old up/down arrow steppers are replaced with fluid, native-momentum scroll wheels for hour/minute/second, plus a sliding AM/PM pill. All existing YAML configuration keeps working unchanged.
+
 ## Installation
 
 ### HACS
@@ -170,8 +172,8 @@ you can use the following variables in your theme's config file:
 [downloads-link]: https://github.com/GeorgeSG/lovelace-time-picker-card/releases
 [releases-shield]: https://img.shields.io/github/release/GeorgeSG/lovelace-time-picker-card.svg
 [releases-link]: https://github.com/GeorgeSG/lovelace-time-picker-card/releases
-[ci-shield]: https://img.shields.io/github/workflow/status/GeorgeSG/lovelace-time-picker-card/CI?label=CI&logo=github&
-[ci-link]: https://github.com/GeorgeSG/lovelace-time-picker-card/actions?query=workflow%3ACI
+[ci-shield]: https://img.shields.io/github/actions/workflow/status/dwainegallimore/lovelace-time-picker-card/ci.yaml?label=CI&logo=github
+[ci-link]: https://github.com/dwainegallimore/lovelace-time-picker-card/actions?query=workflow%3ACI
 [maintenance-shield]: https://img.shields.io/maintenance/yes/2022.svg
 [maintenance-link]: https://github.com/GeorgeSG/lovelace-time-picker-card
 [license-shield]: https://img.shields.io/github/license/GeorgeSG/lovelace-time-picker-card?color=brightgreen
