@@ -24,6 +24,28 @@ export function generateWheelRange(min: number, max: number, step: number): numb
   return values;
 }
 
+/**
+ * Index of the closest value to `target` in `values`. Used so an entity value that doesn't
+ * land exactly on the wheel's step grid (e.g. a real input_datetime minute of 23 when
+ * minute_step is configured as 5, which happens with any value set outside this card - by
+ * voice, an automation, or the native more-info dialog) still displays *something* sensible
+ * instead of silently failing to sync at all.
+ */
+function nearestIndex(values: number[], target: number): number {
+  let bestIndex = 0;
+  let bestDistance = Math.abs(values[0] - target);
+
+  for (let i = 1; i < values.length; i++) {
+    const distance = Math.abs(values[i] - target);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = i;
+    }
+  }
+
+  return bestIndex;
+}
+
 export type WheelCarry = 'up' | 'down' | null;
 
 export interface WheelOptions {
@@ -101,7 +123,6 @@ export class TimeWheel {
 
   setValues(values: number[], selected: number): void {
     this.values = values;
-    this.currentValue = selected;
     this.scrollEl.innerHTML = '';
     this.items = [];
 
@@ -118,8 +139,9 @@ export class TimeWheel {
       }
     }
 
-    const idxInBase = values.indexOf(selected);
-    const startIndex = middleCopy * values.length + Math.max(idxInBase, 0);
+    const idxInBase = values.indexOf(selected) !== -1 ? values.indexOf(selected) : nearestIndex(values, selected);
+    const startIndex = middleCopy * values.length + idxInBase;
+    this.currentValue = values[idxInBase];
     this.prevRawIndex = startIndex;
 
     // Force a layout flush before scrolling - without it the browser may still be
@@ -131,12 +153,15 @@ export class TimeWheel {
 
   /** Programmatically move to a value (e.g. syncing from hass, or a carry from a neighboring wheel). */
   setValue(value: number): void {
-    if (value === this.currentValue || this.values.length === 0) {
+    if (this.values.length === 0) {
       return;
     }
 
-    const idxInBase = this.values.indexOf(value);
-    if (idxInBase === -1) {
+    const exactIndex = this.values.indexOf(value);
+    const idxInBase = exactIndex !== -1 ? exactIndex : nearestIndex(this.values, value);
+    const snappedValue = this.values[idxInBase];
+
+    if (snappedValue === this.currentValue) {
       return;
     }
 
@@ -156,7 +181,7 @@ export class TimeWheel {
       }
     }
 
-    this.currentValue = value;
+    this.currentValue = snappedValue;
     this.scrollToRawIndex(bestIndex);
   }
 
