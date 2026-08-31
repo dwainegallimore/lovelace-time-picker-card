@@ -82,6 +82,17 @@ export class TimeWheel {
   private rafId: number | null = null;
   private settleTimer: number | undefined;
   private collapseTimer: number | undefined;
+  /**
+   * A raw index whose scroll assignment was clamped to 0 because the wheel had zero size at
+   * the time (a hidden dashboard view/tab, a collapsed ancestor, a sections/masonry grid cell
+   * that hasn't been sized yet) - re-applied by the ResizeObserver below the moment the wheel
+   * actually gets laid out. Without this, a value that arrives before the card is visible
+   * gets stuck showing its default forever: `setValue()` only re-scrolls when the *value*
+   * changes, and on every later hass update it already matches, so the wrong on-screen
+   * position (still at index 0) is never revisited.
+   */
+  private pendingRawIndex: number | null = null;
+  private readonly resizeObserver: ResizeObserver;
 
   constructor(options: WheelOptions) {
     this.itemHeight = options.itemHeight ?? DEFAULT_ITEM_HEIGHT;
@@ -108,6 +119,20 @@ export class TimeWheel {
     this.element.addEventListener('pointerleave', () => this.setActive(false));
     this.element.addEventListener('focus', () => this.setActive(true));
     this.element.addEventListener('blur', () => this.setActive(false));
+
+    this.resizeObserver = new ResizeObserver(() => this.onResize());
+    this.resizeObserver.observe(this.scrollEl);
+  }
+
+  /** Catches up a scroll position that was deferred because the wheel had zero size when it was requested. */
+  private onResize(): void {
+    if (this.pendingRawIndex === null || this.scrollEl.clientHeight === 0) {
+      return;
+    }
+    const rawIndex = this.pendingRawIndex;
+    this.pendingRawIndex = null;
+    this.scrollEl.scrollTo({ top: rawIndex * this.itemHeight, behavior: 'auto' });
+    this.updateVisualState();
   }
 
   /** Reveals the full wheel immediately, or schedules a graceful collapse after a short delay. */
@@ -142,12 +167,11 @@ export class TimeWheel {
     const idxInBase = values.indexOf(selected) !== -1 ? values.indexOf(selected) : nearestIndex(values, selected);
     const startIndex = middleCopy * values.length + idxInBase;
     this.currentValue = values[idxInBase];
-    this.prevRawIndex = startIndex;
 
     // Force a layout flush before scrolling - without it the browser may still be
     // measuring the pre-insertion (empty) scrollHeight and silently clamp this to 0.
     void this.scrollEl.offsetHeight;
-    this.scrollEl.scrollTo({ top: startIndex * this.itemHeight, behavior: 'auto' });
+    this.scrollToRawIndex(startIndex, 'auto');
     this.updateVisualState();
   }
 
@@ -189,9 +213,19 @@ export class TimeWheel {
     this.element.focus();
   }
 
-  private scrollToRawIndex(rawIndex: number): void {
+  private scrollToRawIndex(rawIndex: number, behavior: ScrollBehavior = 'smooth'): void {
     this.prevRawIndex = rawIndex;
-    this.scrollEl.scrollTo({ top: rawIndex * this.itemHeight, behavior: 'smooth' });
+
+    if (this.scrollEl.clientHeight === 0) {
+      // Not laid out yet (hidden view/tab, collapsed ancestor, unsized grid cell). Assigning
+      // scrollTop now would silently clamp to 0 and stick there - defer it to the
+      // ResizeObserver, which re-applies it the moment this wheel actually gets a size.
+      this.pendingRawIndex = rawIndex;
+      return;
+    }
+
+    this.pendingRawIndex = null;
+    this.scrollEl.scrollTo({ top: rawIndex * this.itemHeight, behavior });
   }
 
   private onKeydown = (ev: KeyboardEvent): void => {
@@ -255,8 +289,7 @@ export class TimeWheel {
     if (currentCopy < 1 || currentCopy > this.repeats - 2) {
       const middleCopy = Math.floor(this.repeats / 2);
       const recenterIndex = middleCopy * length + baseIndex;
-      this.prevRawIndex = recenterIndex;
-      this.scrollEl.scrollTo({ top: recenterIndex * this.itemHeight, behavior: 'auto' });
+      this.scrollToRawIndex(recenterIndex, 'auto');
     }
 
     const valueChanged = value !== this.currentValue;
