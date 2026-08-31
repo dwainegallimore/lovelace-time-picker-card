@@ -1,7 +1,9 @@
 import { HomeAssistant, LovelaceCardEditor, TimePickerCardConfig } from './types';
 
 const NAME_TO_LABEL_MAP: Record<string, string> = {
-  entity: 'input_datetime entity id',
+  // Empty on purpose - the entity picker's own selected-value display (icon + name) already
+  // makes its purpose obvious, so a label above it is redundant technical-sounding noise.
+  entity: '',
   name: 'Name',
   hour_step: 'Hour step',
   minute_step: 'Minute step',
@@ -31,14 +33,21 @@ const SCHEMA = [
     ],
   },
   {
-    name: 'hour_step',
-    default: 1,
-    selector: { number: { mode: 'slider', min: 1, max: 24, step: 1 } },
-  },
-  {
-    name: 'minute_step',
-    default: 5,
-    selector: { number: { mode: 'slider', min: 1, max: 60, step: 1 } },
+    // Sliders side by side on one row, same forced-column technique as above.
+    type: 'grid',
+    column_min_width: '220px',
+    schema: [
+      {
+        type: 'grid',
+        column_min_width: '100%',
+        schema: [{ name: 'hour_step', default: 1, selector: { number: { mode: 'slider', min: 1, max: 24, step: 1 } } }],
+      },
+      {
+        type: 'grid',
+        column_min_width: '100%',
+        schema: [{ name: 'minute_step', default: 5, selector: { number: { mode: 'slider', min: 1, max: 60, step: 1 } } }],
+      },
+    ],
   },
   {
     // Same forced-column technique as above - hour_mode left, link_values right, on one row.
@@ -199,7 +208,8 @@ export class TimePickerCardEditor extends HTMLElement implements LovelaceCardEdi
     form.hass = this._hass;
     form.data = this._toFormData(this._config);
     form.schema = SCHEMA;
-    form.computeLabel = ({ name }: { name: string }): string => NAME_TO_LABEL_MAP[name] || name;
+    form.computeLabel = ({ name }: { name: string }): string =>
+      name in NAME_TO_LABEL_MAP ? NAME_TO_LABEL_MAP[name] : name;
     form.addEventListener('value-changed', ((ev: CustomEvent) => {
       ev.stopPropagation();
       const value = { ...ev.detail.value };
