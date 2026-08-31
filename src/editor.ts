@@ -19,36 +19,32 @@ const NUMERIC_SELECT_FIELDS = new Set(['hour_mode']);
 
 const SCHEMA = [
   {
-    type: 'grid',
-    schema: [
-      { name: 'entity', selector: { entity: { domain: 'input_datetime' } } },
-      { name: 'name', selector: { text: {} } },
-    ],
-  },
-  {
-    // Two forced single-column sub-grids side by side, same proven pattern as "Appearance"
-    // below - a plain 4-item grid depends on the dialog's width for its column count (it
-    // rendered 3-per-row in a wide dialog, scattering these), so column count can't be left
-    // to chance here.
+    // Two forced single-column sub-grids side by side, same proven pattern used throughout
+    // this schema - a plain two-item grid lets each field's own intrinsic width decide its
+    // column, and the entity picker's icon/clear/chevron chrome is wider than a plain text
+    // field, so the row rendered visibly lopsided instead of an even 50/50 split.
     type: 'grid',
     column_min_width: '220px',
     schema: [
-      {
-        type: 'grid',
-        column_min_width: '100%',
-        schema: [
-          {
-            name: 'hour_step',
-            default: 1,
-            selector: { number: { mode: 'box', min: 1, max: 24, step: 1 } },
-          },
-          {
-            name: 'minute_step',
-            default: 5,
-            selector: { number: { mode: 'box', min: 1, max: 60, step: 1 } },
-          },
-        ],
-      },
+      { type: 'grid', column_min_width: '100%', schema: [{ name: 'entity', selector: { entity: { domain: 'input_datetime' } } }] },
+      { type: 'grid', column_min_width: '100%', schema: [{ name: 'name', selector: { text: {} } }] },
+    ],
+  },
+  {
+    name: 'hour_step',
+    default: 1,
+    selector: { number: { mode: 'slider', min: 1, max: 24, step: 1 } },
+  },
+  {
+    name: 'minute_step',
+    default: 5,
+    selector: { number: { mode: 'slider', min: 1, max: 60, step: 1 } },
+  },
+  {
+    // Same forced-column technique as above - hour_mode left, link_values right, on one row.
+    type: 'grid',
+    column_min_width: '220px',
+    schema: [
       {
         type: 'grid',
         column_min_width: '100%',
@@ -65,9 +61,9 @@ const SCHEMA = [
               },
             },
           },
-          { name: 'link_values', selector: { boolean: {} } },
         ],
       },
+      { type: 'grid', column_min_width: '100%', schema: [{ name: 'link_values', selector: { boolean: {} } }] },
     ],
   },
   {
