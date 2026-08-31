@@ -109,10 +109,22 @@ const CARD_STYLES = `
     gap: 12px;
     margin-right: 16px;
     user-select: none;
+    /* The wheel (.tpc-content, flex-shrink: 0 below) must never be clipped by ha-card's own
+       overflow: hidden when a narrow tile can't fit both at their natural width - this is the
+       one that's allowed to give ground, wrapping or shrinking its text instead. Flex items
+       default to min-width: auto (their own content's width as a floor), which some themes'
+       fonts/sizing push wide enough that it stops this from actually shrinking - min-width: 0
+       removes that floor so the shrink below can go all the way down to wrapped text. */
+    min-width: 0;
+    flex-shrink: 1;
   }
 
-  .tpc-nested-name state-badge { color: var(--tpc-icon-color); }
-  .tpc-nested-name span { color: var(--primary-text-color); font-weight: 500; }
+  .tpc-nested-name state-badge { color: var(--tpc-icon-color); flex-shrink: 0; }
+  .tpc-nested-name span {
+    color: var(--primary-text-color);
+    font-weight: 500;
+    min-width: 0;
+  }
 
   .tpc-content {
     display: flex;
@@ -366,7 +378,7 @@ export class TimePickerCard extends HTMLElement implements LovelaceCard {
   getGridOptions(): LovelaceGridOptions {
     return {
       columns: 6,
-      rows: 2,
+      rows: 'auto',
       min_columns: 4,
       max_columns: 12,
       min_rows: 1,
