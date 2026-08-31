@@ -17,7 +17,17 @@ import { Hour } from './models/hour';
 import { Minute } from './models/minute';
 import { Second } from './models/second';
 import { Time } from './models/time';
-import { Direction, HassEntity, HomeAssistant, Layout, LovelaceCard, LovelaceCardEditor, Period, TimePickerCardConfig } from './types';
+import {
+  Direction,
+  HassEntity,
+  HomeAssistant,
+  Layout,
+  LovelaceCard,
+  LovelaceCardEditor,
+  LovelaceGridOptions,
+  Period,
+  TimePickerCardConfig,
+} from './types';
 import { generateWheelRange, TimeWheel } from './wheel';
 
 console.info(
@@ -282,18 +292,6 @@ export class TimePickerCard extends HTMLElement implements LovelaceCard {
     return document.createElement('time-picker-card-editor') as unknown as LovelaceCardEditor;
   }
 
-  /** Tells Lovelace's grid-based "sections" view how to size and resize this card. */
-  static getLayoutOptions(): Record<string, number> {
-    return {
-      grid_columns: 6,
-      grid_rows: 2,
-      grid_min_columns: 4,
-      grid_max_columns: 12,
-      grid_min_rows: 1,
-      grid_max_rows: 3,
-    };
-  }
-
   private _hass!: HomeAssistant;
   private _config!: TimePickerCardConfig;
   private _time?: Time;
@@ -361,6 +359,18 @@ export class TimePickerCard extends HTMLElement implements LovelaceCard {
 
   getCardSize(): number {
     return CARD_SIZE;
+  }
+
+  /** Tells Lovelace's grid-based "sections" view how to size and resize this card. */
+  getGridOptions(): LovelaceGridOptions {
+    return {
+      columns: 6,
+      rows: 2,
+      min_columns: 4,
+      max_columns: 12,
+      min_rows: 1,
+      max_rows: 4,
+    };
   }
 
   connectedCallback(): void {

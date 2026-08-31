@@ -42,11 +42,21 @@ export interface LovelaceCardConfig {
   [key: string]: unknown;
 }
 
+export interface LovelaceGridOptions {
+  columns?: number | 'full';
+  rows?: number | 'auto';
+  max_columns?: number;
+  min_columns?: number;
+  min_rows?: number;
+  max_rows?: number;
+}
+
 export interface LovelaceCard extends HTMLElement {
   hass?: HomeAssistant;
   isPanel?: boolean;
   editMode?: boolean;
   getCardSize(): number | Promise<number>;
+  getGridOptions?(): LovelaceGridOptions;
   setConfig(config: LovelaceCardConfig): void;
 }
 

@@ -26,8 +26,14 @@ const SCHEMA = [
     ],
   },
   {
+    // Row-major fill puts column 1 = [hour_step, minute_step] and column 2 = [hour_mode, link_values].
     type: 'grid',
     schema: [
+      {
+        name: 'hour_step',
+        default: 1,
+        selector: { number: { mode: 'box', min: 1, max: 24, step: 1 } },
+      },
       {
         name: 'hour_mode',
         selector: {
@@ -40,76 +46,84 @@ const SCHEMA = [
           },
         },
       },
-      { name: 'link_values', selector: { boolean: {} } },
-      {
-        name: 'hour_step',
-        default: 1,
-        selector: { number: { mode: 'box', min: 1, max: 24, step: 1 } },
-      },
       {
         name: 'minute_step',
         default: 5,
         selector: { number: { mode: 'box', min: 1, max: 60, step: 1 } },
       },
+      { name: 'link_values', selector: { boolean: {} } },
     ],
   },
   {
+    // No `name` here - this expandable is purely a visual accordion. Its two direct
+    // children each own exactly one data key (layout / hide) so nothing double-nests.
     type: 'expandable',
-    name: 'layout',
     title: 'Appearance',
     schema: [
       {
         type: 'grid',
+        name: 'layout',
+        column_min_width: '220px',
         schema: [
           {
-            name: 'align_controls',
-            selector: {
-              select: {
-                mode: 'box',
-                options: [
-                  { value: 'left', label: 'Left' },
-                  { value: 'center', label: 'Center' },
-                  { value: 'right', label: 'Right' },
-                ],
+            // Unnamed nested grids are pure visual grouping - they flatten straight
+            // into the parent's "layout" scope rather than adding another nesting level.
+            type: 'grid',
+            column_min_width: '100%',
+            schema: [
+              {
+                name: 'align_controls',
+                selector: {
+                  select: {
+                    mode: 'box',
+                    options: [
+                      { value: 'left', label: 'Left' },
+                      { value: 'center', label: 'Center' },
+                      { value: 'right', label: 'Right' },
+                    ],
+                  },
+                },
               },
-            },
+              {
+                name: 'name',
+                selector: {
+                  select: {
+                    mode: 'box',
+                    options: [
+                      { value: 'header', label: 'Header' },
+                      { value: 'inside', label: 'Inside' },
+                    ],
+                  },
+                },
+              },
+              {
+                name: 'hour_mode',
+                selector: {
+                  select: {
+                    mode: 'box',
+                    options: [
+                      { value: 'single', label: 'Single' },
+                      { value: 'double', label: 'Double' },
+                    ],
+                  },
+                },
+              },
+            ],
           },
           {
-            name: 'name',
-            selector: {
-              select: {
-                mode: 'box',
-                options: [
-                  { value: 'header', label: 'Header' },
-                  { value: 'inside', label: 'Inside' },
-                ],
-              },
-            },
+            type: 'grid',
+            column_min_width: '100%',
+            schema: [
+              { name: 'embedded', selector: { boolean: {} } },
+              { name: 'thin', selector: { boolean: {} } },
+            ],
           },
-          {
-            name: 'hour_mode',
-            selector: {
-              select: {
-                mode: 'box',
-                options: [
-                  { value: 'single', label: 'Single' },
-                  { value: 'double', label: 'Double' },
-                ],
-              },
-            },
-          },
-        ],
-      },
-      {
-        type: 'grid',
-        schema: [
-          { name: 'embedded', selector: { boolean: {} } },
-          { name: 'thin', selector: { boolean: {} } },
         ],
       },
       {
         type: 'grid',
         name: 'hide',
+        column_min_width: '150px',
         schema: [
           { name: 'name', selector: { boolean: {} } },
           { name: 'icon', selector: { boolean: {} } },
