@@ -64,9 +64,17 @@ const CARD_STYLES = `
   }
 
   ha-card {
-    height: 100%;
+    /* min-height, not height: a wheel expanding from its collapsed row to showing its
+       neighbors (44px -> 132px) grows this card's natural content height, and a hard
+       height: 100% + overflow: hidden here would silently clip that growth to whatever the
+       surrounding grid cell happened to be at the last layout pass - invisible if the grid
+       hasn't (or can't) reactively resize to match. min-height keeps the card filling at
+       least its given space (so a manually-oversized grid cell still looks filled) without
+       capping how tall it's allowed to grow. overflow: visible lets that growth, and the
+       expanded wheel's own fade mask, render past the card's own box instead of vanishing. */
+    min-height: 100%;
     width: 100%;
-    overflow: hidden;
+    overflow: visible;
     border-radius: var(--tpc-border-radius);
     display: flex;
     flex-direction: column;
