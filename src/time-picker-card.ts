@@ -59,16 +59,18 @@ const CARD_STYLES = `
   }
 
   .tpc-header {
-    padding: 16px;
-    color: var(--tpc-text-color);
-    background: var(--tpc-elements-background-color);
-    font-size: 1em;
-    font-weight: 500;
+    padding: 14px 20px 10px;
+    color: var(--secondary-text-color);
+    background: transparent;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
     text-align: center;
     user-select: none;
   }
 
-  ha-card.thin .tpc-header { padding: 8px; }
+  ha-card.thin .tpc-header { padding: 8px 12px 6px; }
 
   .tpc-row {
     display: flex;
@@ -104,32 +106,48 @@ const CARD_STYLES = `
 
   .tpc-wheel-group {
     display: flex;
-    align-items: stretch;
+    align-items: center;
     position: relative;
     border-radius: calc(var(--tpc-border-radius) * 0.6);
-    background: var(--secondary-background-color, rgba(127, 127, 127, 0.08));
-    padding: 0 6px;
+    background: var(--secondary-background-color, rgba(127, 127, 127, 0.05));
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.18), inset 0 0 0 1px rgba(127, 127, 127, 0.08);
+    padding: 0 8px;
+    transition: border-radius 0.32s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   .tpc-wheel-group::before {
     content: '';
     position: absolute;
-    left: 6px;
-    right: 6px;
+    left: 8px;
+    right: 8px;
     top: 50%;
     height: var(--tpc-item-height);
     transform: translateY(-50%);
-    background: rgba(127, 127, 127, 0.16);
-    background: color-mix(in srgb, var(--tpc-accent-color) 14%, transparent);
-    border-radius: 10px;
+    background: rgba(127, 127, 127, 0.14);
+    background: color-mix(in srgb, var(--tpc-accent-color) 10%, transparent);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+    border-radius: 8px;
+    border: 1px solid rgba(127, 127, 127, 0.14);
+    border-color: color-mix(in srgb, var(--tpc-accent-color) 20%, transparent);
     pointer-events: none;
+    transition: opacity 0.2s ease;
   }
 
   .tpc-wheel {
     position: relative;
-    width: 2.2em;
-    height: calc(var(--tpc-item-height) * 3);
+    width: 2.1em;
+    height: var(--tpc-item-height);
     outline: none;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: height 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .tpc-wheel-group.is-active .tpc-wheel,
+  .tpc-wheel-group:focus-within .tpc-wheel {
+    height: calc(var(--tpc-item-height) * 3);
     -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 32%, black 68%, transparent 100%);
     mask-image: linear-gradient(to bottom, transparent 0%, black 32%, black 68%, transparent 100%);
   }
@@ -140,7 +158,7 @@ const CARD_STYLES = `
   }
 
   .tpc-wheel-scroll {
-    height: 100%;
+    height: calc(var(--tpc-item-height) * 3);
     overflow-y: scroll;
     scroll-snap-type: y mandatory;
     scrollbar-width: none;
@@ -155,8 +173,8 @@ const CARD_STYLES = `
     align-items: center;
     justify-content: center;
     scroll-snap-align: center;
-    font-size: 1.6rem;
-    font-weight: 500;
+    font-size: 1.5rem;
+    font-weight: 400;
     font-variant-numeric: tabular-nums;
     color: var(--primary-text-color);
     transition: color 0.15s ease-out;
@@ -167,14 +185,18 @@ const CARD_STYLES = `
 
   .tpc-wheel-item.is-center {
     color: var(--tpc-accent-color);
-    font-weight: 700;
+    font-weight: 600;
   }
 
   .tpc-separator {
-    font-size: 1.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: var(--tpc-item-height);
+    font-size: 1.4rem;
     font-weight: 600;
     color: var(--secondary-text-color);
-    padding-bottom: 2px;
+    opacity: 0.6;
   }
 
   .tpc-period {
@@ -270,6 +292,8 @@ export class TimePickerCard extends HTMLElement implements LovelaceCard {
   private _minuteWheel?: TimeWheel;
   private _secondWheel?: TimeWheel;
   private _periodEls?: PeriodElements;
+  private _wheelGroup?: HTMLDivElement;
+  private readonly _activeWheels = new Set<string>();
 
   constructor() {
     super();
@@ -424,16 +448,15 @@ export class TimePickerCard extends HTMLElement implements LovelaceCard {
 
     const wheelGroup = document.createElement('div');
     wheelGroup.className = 'tpc-wheel-group';
+    this._wheelGroup = wheelGroup;
+    this._activeWheels.clear();
 
     this._hourWheel = new TimeWheel({
       label: 'Hour',
       format: (value) => new Hour(value, 1, this._config.hour_mode).toString(),
       onChange: (value) => this._onHourChange(value),
+      onActiveChange: (active) => this._setWheelActive('hour', active),
     });
-    this._hourWheel.setValues(
-      generateWheelRange(0, 23, this._config.hour_step ?? DEFAULT_HOUR_STEP),
-      this._time.hour.value
-    );
     wheelGroup.appendChild(this._hourWheel.element);
     wheelGroup.appendChild(this._buildSeparator());
 
@@ -441,11 +464,8 @@ export class TimePickerCard extends HTMLElement implements LovelaceCard {
       label: 'Minute',
       format: (value) => (value < 10 ? `0${value}` : String(value)),
       onChange: (value, carry, laps) => this._onMinuteChange(value, carry, laps),
+      onActiveChange: (active) => this._setWheelActive('minute', active),
     });
-    this._minuteWheel.setValues(
-      generateWheelRange(0, 59, this._config.minute_step ?? DEFAULT_MINUTE_STEP),
-      this._time.minute.value
-    );
     wheelGroup.appendChild(this._minuteWheel.element);
 
     if (this._config.hide?.seconds === false) {
@@ -454,11 +474,8 @@ export class TimePickerCard extends HTMLElement implements LovelaceCard {
         label: 'Second',
         format: (value) => (value < 10 ? `0${value}` : String(value)),
         onChange: (value, carry, laps) => this._onSecondChange(value, carry, laps),
+        onActiveChange: (active) => this._setWheelActive('second', active),
       });
-      this._secondWheel.setValues(
-        generateWheelRange(0, 59, this._config.second_step ?? DEFAULT_SECOND_STEP),
-        this._time.second.value
-      );
       wheelGroup.appendChild(this._secondWheel.element);
     } else {
       this._secondWheel = undefined;
@@ -472,7 +489,24 @@ export class TimePickerCard extends HTMLElement implements LovelaceCard {
 
     row.appendChild(content);
     card.appendChild(row);
+
+    // Attach the whole subtree to the live document *before* populating the wheels -
+    // scrollTo() on a still-detached element has no layout box and silently clamps to 0.
     this._content.appendChild(card);
+
+    this._hourWheel.setValues(
+      generateWheelRange(0, 23, this._config.hour_step ?? DEFAULT_HOUR_STEP),
+      this._time.hour.value
+    );
+    this._minuteWheel.setValues(
+      generateWheelRange(0, 59, this._config.minute_step ?? DEFAULT_MINUTE_STEP),
+      this._time.minute.value
+    );
+    this._secondWheel?.setValues(
+      generateWheelRange(0, 59, this._config.second_step ?? DEFAULT_SECOND_STEP),
+      this._time.second.value
+    );
+
     this._built = true;
   }
 
@@ -590,6 +624,17 @@ export class TimePickerCard extends HTMLElement implements LovelaceCard {
 
     this._syncPeriodToggle();
     return wrap;
+  }
+
+  /** Keeps hour/minute/second wheels expanding and collapsing together as one unit. */
+  private _setWheelActive(name: string, active: boolean): void {
+    if (active) {
+      this._activeWheels.add(name);
+    } else {
+      this._activeWheels.delete(name);
+    }
+
+    this._wheelGroup?.classList.toggle('is-active', this._activeWheels.size > 0);
   }
 
   private _syncPeriodToggle(): void {

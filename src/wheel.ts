@@ -1,6 +1,7 @@
 const DEFAULT_ITEM_HEIGHT = 44;
 const DEFAULT_REPEATS = 5; // odd, so there's always a true middle copy to sit in
 const SETTLE_DEBOUNCE_MS = 120;
+const COLLAPSE_DELAY_MS = 500;
 
 /**
  * Generates the cyclical sequence of values a wheel steps through, starting at `min`
@@ -30,6 +31,8 @@ export interface WheelOptions {
   itemHeight?: number;
   format?: (value: number) => string;
   onChange?: (value: number, carry: WheelCarry, laps: number) => void;
+  /** Fires immediately on interaction start, and (after a short grace delay) on interaction end. */
+  onActiveChange?: (active: boolean) => void;
 }
 
 /**
@@ -48,6 +51,7 @@ export class TimeWheel {
   private readonly repeats = DEFAULT_REPEATS;
   private readonly format: (value: number) => string;
   private readonly onChange?: (value: number, carry: WheelCarry, laps: number) => void;
+  private readonly onActiveChange?: (active: boolean) => void;
 
   private items: HTMLDivElement[] = [];
   private values: number[] = [];
@@ -55,11 +59,13 @@ export class TimeWheel {
   private prevRawIndex = 0;
   private rafId: number | null = null;
   private settleTimer: number | undefined;
+  private collapseTimer: number | undefined;
 
   constructor(options: WheelOptions) {
     this.itemHeight = options.itemHeight ?? DEFAULT_ITEM_HEIGHT;
     this.format = options.format ?? ((value) => String(value));
     this.onChange = options.onChange;
+    this.onActiveChange = options.onActiveChange;
 
     this.element = document.createElement('div');
     this.element.className = 'tpc-wheel';
@@ -75,6 +81,22 @@ export class TimeWheel {
 
     this.scrollEl.addEventListener('scroll', this.onScroll, { passive: true });
     this.element.addEventListener('keydown', this.onKeydown);
+    this.element.addEventListener('pointerenter', () => this.setActive(true));
+    this.element.addEventListener('pointerdown', () => this.setActive(true));
+    this.element.addEventListener('pointerleave', () => this.setActive(false));
+    this.element.addEventListener('focus', () => this.setActive(true));
+    this.element.addEventListener('blur', () => this.setActive(false));
+  }
+
+  /** Reveals the full wheel immediately, or schedules a graceful collapse after a short delay. */
+  private setActive(active: boolean): void {
+    window.clearTimeout(this.collapseTimer);
+
+    if (active) {
+      this.onActiveChange?.(true);
+    } else {
+      this.collapseTimer = window.setTimeout(() => this.onActiveChange?.(false), COLLAPSE_DELAY_MS);
+    }
   }
 
   setValues(values: number[], selected: number): void {
@@ -99,6 +121,10 @@ export class TimeWheel {
     const idxInBase = values.indexOf(selected);
     const startIndex = middleCopy * values.length + Math.max(idxInBase, 0);
     this.prevRawIndex = startIndex;
+
+    // Force a layout flush before scrolling - without it the browser may still be
+    // measuring the pre-insertion (empty) scrollHeight and silently clamp this to 0.
+    void this.scrollEl.offsetHeight;
     this.scrollEl.scrollTo({ top: startIndex * this.itemHeight, behavior: 'auto' });
     this.updateVisualState();
   }
@@ -206,5 +232,10 @@ export class TimeWheel {
       const carry: WheelCarry = lapDiff > 0 ? 'up' : lapDiff < 0 ? 'down' : null;
       this.onChange?.(value, carry, Math.abs(lapDiff));
     }
+
+    // Settle is the authoritative resting position - recompute visuals from it directly,
+    // rather than trusting whatever the last mid-scroll rAF frame happened to leave behind.
+    this.updateVisualState();
+    this.setActive(false);
   }
 }
