@@ -14,88 +14,106 @@ const NAME_TO_LABEL_MAP: Record<string, string> = {
   seconds: 'Seconds',
 };
 
+/** Fields whose selector.select values are strings but the config stores as a number. */
+const NUMERIC_SELECT_FIELDS = new Set(['hour_mode']);
+
 const SCHEMA = [
-  { name: 'entity', selector: { entity: { domain: 'input_datetime' } } },
   {
-    name: 'name',
-    selector: { text: {} },
+    type: 'grid',
+    schema: [
+      { name: 'entity', selector: { entity: { domain: 'input_datetime' } } },
+      { name: 'name', selector: { text: {} } },
+    ],
   },
   {
     type: 'grid',
     schema: [
       {
+        name: 'hour_mode',
+        selector: {
+          select: {
+            mode: 'box',
+            options: [
+              { value: '12', label: '12-hour' },
+              { value: '24', label: '24-hour' },
+            ],
+          },
+        },
+      },
+      { name: 'link_values', selector: { boolean: {} } },
+      {
         name: 'hour_step',
-        type: 'integer',
-        required: true,
         default: 1,
-        valueMin: 1,
-        valueMax: 24,
+        selector: { number: { mode: 'box', min: 1, max: 24, step: 1 } },
       },
       {
         name: 'minute_step',
-        type: 'integer',
-        required: true,
         default: 5,
-        valueMin: 1,
-        valueMax: 60,
+        selector: { number: { mode: 'box', min: 1, max: 60, step: 1 } },
       },
-      {
-        name: 'hour_mode',
-        type: 'select',
-        options: [
-          [12, '12'],
-          [24, '24'],
-        ],
-      },
-      { name: 'link_values', type: 'boolean' },
     ],
   },
   {
     type: 'expandable',
     name: 'layout',
-    title: 'Layout controls',
-    schema: [
-      {
-        name: 'hour_mode',
-        type: 'select',
-        options: [
-          ['single', 'single'],
-          ['double', 'double'],
-        ],
-      },
-      {
-        name: 'align_controls',
-        type: 'select',
-        options: [
-          ['left', 'left'],
-          ['center', 'center'],
-          ['right', 'right'],
-        ],
-      },
-      {
-        name: 'name',
-        type: 'select',
-        options: [
-          ['header', 'header'],
-          ['inside', 'inside'],
-        ],
-      },
-      { name: 'embedded', type: 'boolean' },
-      { name: 'thin', type: 'boolean' },
-    ],
-  },
-  {
-    type: 'expandable',
-    name: 'hide',
-    title: 'Hide controls',
+    title: 'Appearance',
     schema: [
       {
         type: 'grid',
-        name: '',
         schema: [
-          { name: 'name', type: 'boolean' },
-          { name: 'icon', type: 'boolean' },
-          { name: 'seconds', type: 'boolean' },
+          {
+            name: 'align_controls',
+            selector: {
+              select: {
+                mode: 'box',
+                options: [
+                  { value: 'left', label: 'Left' },
+                  { value: 'center', label: 'Center' },
+                  { value: 'right', label: 'Right' },
+                ],
+              },
+            },
+          },
+          {
+            name: 'name',
+            selector: {
+              select: {
+                mode: 'box',
+                options: [
+                  { value: 'header', label: 'Header' },
+                  { value: 'inside', label: 'Inside' },
+                ],
+              },
+            },
+          },
+          {
+            name: 'hour_mode',
+            selector: {
+              select: {
+                mode: 'box',
+                options: [
+                  { value: 'single', label: 'Single' },
+                  { value: 'double', label: 'Double' },
+                ],
+              },
+            },
+          },
+        ],
+      },
+      {
+        type: 'grid',
+        schema: [
+          { name: 'embedded', selector: { boolean: {} } },
+          { name: 'thin', selector: { boolean: {} } },
+        ],
+      },
+      {
+        type: 'grid',
+        name: 'hide',
+        schema: [
+          { name: 'name', selector: { boolean: {} } },
+          { name: 'icon', selector: { boolean: {} } },
+          { name: 'seconds', selector: { boolean: {} } },
         ],
       },
     ],
@@ -142,7 +160,7 @@ export class TimePickerCardEditor extends HTMLElement implements LovelaceCardEdi
   setConfig(config: TimePickerCardConfig): void {
     this._config = config;
     if (this._form) {
-      this._form.data = config;
+      this._form.data = this._toFormData(config);
     }
   }
 
@@ -153,14 +171,20 @@ export class TimePickerCardEditor extends HTMLElement implements LovelaceCardEdi
 
     const form = document.createElement('ha-form') as HaFormElement;
     form.hass = this._hass;
-    form.data = this._config;
+    form.data = this._toFormData(this._config);
     form.schema = SCHEMA;
     form.computeLabel = ({ name }: { name: string }): string => NAME_TO_LABEL_MAP[name] || name;
     form.addEventListener('value-changed', ((ev: CustomEvent) => {
       ev.stopPropagation();
-      const newConfig = { ...this._config, ...ev.detail.value } as TimePickerCardConfig;
+      const value = { ...ev.detail.value };
+      for (const field of NUMERIC_SELECT_FIELDS) {
+        if (typeof value[field] === 'string') {
+          value[field] = Number(value[field]);
+        }
+      }
+      const newConfig = { ...this._config, ...value } as TimePickerCardConfig;
       this._config = newConfig;
-      form.data = newConfig;
+      form.data = this._toFormData(newConfig);
       this.dispatchEvent(
         new CustomEvent('config-changed', { bubbles: true, composed: true, detail: { config: newConfig } })
       );
@@ -168,6 +192,21 @@ export class TimePickerCardEditor extends HTMLElement implements LovelaceCardEdi
 
     this._form = form;
     this.appendChild(form);
+  }
+
+  /** ha-form's select selector requires string values, so numeric config fields need stringifying for display. */
+  private _toFormData(config?: TimePickerCardConfig): unknown {
+    if (!config) {
+      return config;
+    }
+
+    const data: Record<string, unknown> = { ...config };
+    for (const field of NUMERIC_SELECT_FIELDS) {
+      if (data[field] !== undefined) {
+        data[field] = String(data[field]);
+      }
+    }
+    return data;
   }
 }
 

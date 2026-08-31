@@ -35,6 +35,8 @@ window.customCards.push({
 
 const CARD_STYLES = `
   :host {
+    display: block;
+    height: 100%;
     --tpc-elements-background-color: var(--time-picker-elements-background-color, var(--primary-color));
     --tpc-control-padding: var(--time-picker-control-padding, 8px);
     --tpc-icon-color: var(--time-picker-icon-color, var(--primary-text-color));
@@ -47,9 +49,17 @@ const CARD_STYLES = `
 
   * { box-sizing: border-box; }
 
+  .tpc-card-content {
+    height: 100%;
+  }
+
   ha-card {
+    height: 100%;
+    width: 100%;
     overflow: hidden;
     border-radius: var(--tpc-border-radius);
+    display: flex;
+    flex-direction: column;
   }
 
   ha-card.embedded {
@@ -75,6 +85,7 @@ const CARD_STYLES = `
   .tpc-row {
     display: flex;
     align-items: center;
+    flex: 1 1 auto;
     padding: 20px 16px;
   }
 
@@ -125,12 +136,8 @@ const CARD_STYLES = `
     transform: translateY(-50%);
     background: rgba(127, 127, 127, 0.14);
     background: color-mix(in srgb, var(--tpc-accent-color) 10%, transparent);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
     border-radius: 8px;
-    border: 1px solid rgba(127, 127, 127, 0.14);
-    border-color: color-mix(in srgb, var(--tpc-accent-color) 20%, transparent);
     pointer-events: none;
-    transition: opacity 0.2s ease;
   }
 
   .tpc-wheel {
@@ -275,6 +282,18 @@ export class TimePickerCard extends HTMLElement implements LovelaceCard {
     return document.createElement('time-picker-card-editor') as unknown as LovelaceCardEditor;
   }
 
+  /** Tells Lovelace's grid-based "sections" view how to size and resize this card. */
+  static getLayoutOptions(): Record<string, number> {
+    return {
+      grid_columns: 6,
+      grid_rows: 2,
+      grid_min_columns: 4,
+      grid_max_columns: 12,
+      grid_min_rows: 1,
+      grid_max_rows: 3,
+    };
+  }
+
   private _hass!: HomeAssistant;
   private _config!: TimePickerCardConfig;
   private _time?: Time;
@@ -304,6 +323,7 @@ export class TimePickerCard extends HTMLElement implements LovelaceCard {
     this._root.appendChild(style);
 
     this._content = document.createElement('div');
+    this._content.className = 'tpc-card-content';
     this._root.appendChild(this._content);
   }
 
