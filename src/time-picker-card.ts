@@ -139,14 +139,14 @@ const CARD_STYLES = `
   .tpc-wheel-group::before {
     content: '';
     position: absolute;
-    left: 8px;
-    right: 8px;
+    left: 0;
+    right: 0;
     top: 50%;
     height: var(--tpc-item-height);
     transform: translateY(-50%);
     background: rgba(127, 127, 127, 0.14);
     background: color-mix(in srgb, var(--tpc-accent-color) 10%, transparent);
-    border-radius: 8px;
+    border-radius: calc(var(--tpc-border-radius) * 0.6);
     pointer-events: none;
   }
 

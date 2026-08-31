@@ -26,32 +26,48 @@ const SCHEMA = [
     ],
   },
   {
-    // Row-major fill puts column 1 = [hour_step, minute_step] and column 2 = [hour_mode, link_values].
+    // Two forced single-column sub-grids side by side, same proven pattern as "Appearance"
+    // below - a plain 4-item grid depends on the dialog's width for its column count (it
+    // rendered 3-per-row in a wide dialog, scattering these), so column count can't be left
+    // to chance here.
     type: 'grid',
+    column_min_width: '220px',
     schema: [
       {
-        name: 'hour_step',
-        default: 1,
-        selector: { number: { mode: 'box', min: 1, max: 24, step: 1 } },
-      },
-      {
-        name: 'hour_mode',
-        selector: {
-          select: {
-            mode: 'box',
-            options: [
-              { value: '12', label: '12-hour' },
-              { value: '24', label: '24-hour' },
-            ],
+        type: 'grid',
+        column_min_width: '100%',
+        schema: [
+          {
+            name: 'hour_step',
+            default: 1,
+            selector: { number: { mode: 'box', min: 1, max: 24, step: 1 } },
           },
-        },
+          {
+            name: 'minute_step',
+            default: 5,
+            selector: { number: { mode: 'box', min: 1, max: 60, step: 1 } },
+          },
+        ],
       },
       {
-        name: 'minute_step',
-        default: 5,
-        selector: { number: { mode: 'box', min: 1, max: 60, step: 1 } },
+        type: 'grid',
+        column_min_width: '100%',
+        schema: [
+          {
+            name: 'hour_mode',
+            selector: {
+              select: {
+                mode: 'box',
+                options: [
+                  { value: '12', label: '12-hour' },
+                  { value: '24', label: '24-hour' },
+                ],
+              },
+            },
+          },
+          { name: 'link_values', selector: { boolean: {} } },
+        ],
       },
-      { name: 'link_values', selector: { boolean: {} } },
     ],
   },
   {
