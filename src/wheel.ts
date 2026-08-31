@@ -196,11 +196,20 @@ export class TimeWheel {
 
   /** Continuously morphs scale/opacity by distance from center - the "fluid" feel while dragging. */
   private updateVisualState(): void {
-    const center = this.scrollEl.scrollTop + this.scrollEl.clientHeight / 2;
+    // Viewport-relative geometry, not offsetTop: offsetTop is measured against the item's
+    // offsetParent (the outer .tpc-wheel), whose effective position shifts whenever the wheel
+    // is collapsed (flex centers the taller, fixed-height scroll content within the shorter
+    // collapsed box), which silently throws every distance off by one item at rest - the
+    // digit that's actually shown ends up styled as if it were a faded neighbor instead of
+    // the bold, full-opacity center. getBoundingClientRect() reflects the true rendered
+    // position regardless of that shift.
+    const scrollRect = this.scrollEl.getBoundingClientRect();
+    const centerY = scrollRect.top + scrollRect.height / 2;
 
     for (const item of this.items) {
-      const itemCenter = item.offsetTop + this.itemHeight / 2;
-      const t = Math.min(1, Math.abs(itemCenter - center) / this.itemHeight);
+      const itemRect = item.getBoundingClientRect();
+      const itemCenterY = itemRect.top + itemRect.height / 2;
+      const t = Math.min(1, Math.abs(itemCenterY - centerY) / this.itemHeight);
       item.style.transform = `scale(${1 - 0.32 * t})`;
       item.style.opacity = String(1 - 0.78 * t);
       item.classList.toggle('is-center', t < 0.12);
