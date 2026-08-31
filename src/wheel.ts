@@ -185,10 +185,6 @@ export class TimeWheel {
     const idxInBase = exactIndex !== -1 ? exactIndex : nearestIndex(this.values, value);
     const snappedValue = this.values[idxInBase];
 
-    if (snappedValue === this.currentValue) {
-      return;
-    }
-
     const length = this.values.length;
     const currentRawIndex = Math.round(this.scrollEl.scrollTop / this.itemHeight);
     const currentLap = Math.floor(currentRawIndex / length);
@@ -206,6 +202,20 @@ export class TimeWheel {
     }
 
     this.currentValue = snappedValue;
+
+    // Skip the re-scroll only when the target value hasn't moved AND the wheel is already
+    // sitting at the right raw index. Trusting currentValue alone here used to mean any
+    // external event that nudges scrollTop away from it (a browser re-layout quirk, some
+    // other script touching the DOM, anything) left the wheel silently stuck forever, since
+    // no code path revisits a value that "hasn't changed". Skip only when at rest, though -
+    // while a scroll/settle is actively in flight (a drag, momentum, our own recenter),
+    // scrollTop legitimately differs from the settled position and re-snapping now would
+    // fight the user's own gesture.
+    const isAtRest = this.settleTimer === undefined;
+    if (bestIndex === currentRawIndex || !isAtRest) {
+      return;
+    }
+
     this.scrollToRawIndex(bestIndex);
   }
 
@@ -276,6 +286,11 @@ export class TimeWheel {
   }
 
   private onSettle(): void {
+    // The debounce timer that got us here has already fired - clear the stored id so
+    // `settleTimer === undefined` reliably means "at rest" for anything that checks it
+    // (window.setTimeout never resets the variable on its own once the callback runs).
+    this.settleTimer = undefined;
+
     const length = this.values.length;
     const rawIndex = Math.round(this.scrollEl.scrollTop / this.itemHeight);
     const baseIndex = ((rawIndex % length) + length) % length;
