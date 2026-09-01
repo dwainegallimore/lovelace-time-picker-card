@@ -53,12 +53,12 @@ Time Picker Card supports Lovelace's Visual Editor. Click the + button to add a 
 
 ```yaml
 type: custom:time-picker-card
-hour_mode: 12
+hour_mode: 24
 hour_step: 1
 layout:
   hour_mode: double
   align_controls: center
-  name: header
+  name: inside
   embedded: false
   thin: true
 hide:
@@ -68,6 +68,7 @@ entity: input_datetime.battery_manual_start
 name: Start Time
 minute_step: 1
 grid_options:
+  columns: 7
   rows: auto
 ```
 
