@@ -49,7 +49,7 @@ Time Picker Card supports Lovelace's Visual Editor. Click the + button to add a 
 
 ### 12-hour mode with the AM/PM toggle
 
-![Idle, collapsed wheel](docs/screenshots/idle-collapsed.png)
+![12-hour mode with AM/PM toggle](docs/screenshots/12-hour-ampm.png)
 
 ```yaml
 type: custom:time-picker-card
@@ -74,7 +74,7 @@ grid_options:
 
 ### Idle - collapses to a single row until you interact with it
 
-![12-hour mode with AM/PM toggle](docs/screenshots/12-hour-ampm.png)
+![Idle, collapsed wheel](docs/screenshots/idle-collapsed.png)
 
 ```yaml
 type: custom:time-picker-card
