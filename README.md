@@ -47,41 +47,108 @@ Time Picker Card supports Lovelace's Visual Editor. Click the + button to add a 
 
 ## Examples
 
-### Idle - collapses to a single row until you interact with it
+### 12-hour mode with the AM/PM toggle
 
 ![Idle, collapsed wheel](docs/screenshots/idle-collapsed.png)
 
 ```yaml
-type: 'custom:time-picker-card'
-entity: input_datetime.alarm_time
-hour_mode: 24
+type: custom:time-picker-card
+hour_mode: 12
+hour_step: 1
+layout:
+  hour_mode: double
+  align_controls: center
+  name: header
+  embedded: false
+  thin: true
+hide:
+  seconds: true
+link_values: true
+entity: input_datetime.battery_manual_start
+name: Start Time
+minute_step: 1
+grid_options:
+  rows: auto
 ```
 
-### 12-hour mode with the AM/PM toggle
+### Idle - collapses to a single row until you interact with it
 
 ![12-hour mode with AM/PM toggle](docs/screenshots/12-hour-ampm.png)
 
 ```yaml
-type: 'custom:time-picker-card'
-entity: input_datetime.alarm_time
-hour_mode: 12
+type: custom:time-picker-card
+hour_mode: 24
+hour_step: 1
+layout:
+  hour_mode: double
+  align_controls: center
+  name: inside
+  embedded: false
+  thin: true
+hide:
+  seconds: true
+link_values: true
+entity: input_datetime.battery_manual_start
+name: Start Time
+minute_step: 1
+grid_options:
+  rows: auto
+  columns: 6
 ```
 
-### Two cards stacked with embedded layout
+### Two cards stacked horizontaly with embedded layout
 
 ![Two embedded cards side by side](docs/screenshots/embedded-pair.png)
 
 ```yaml
-type: 'custom:time-picker-card'
-entity: input_datetime.start_time
-name: 'Start time'
-hour_mode: 24
-layout:
-  embedded: true
-  name: inside
+type: horizontal-stack
+cards:
+  - type: custom:time-picker-card
+    hour_mode: 24
+    hour_step: 1
+    layout:
+      hour_mode: double
+      align_controls: center
+      name: header
+      embedded: true
+      thin: true
+    hide:
+      seconds: true
+      name: false
+      icon: false
+    link_values: true
+    minute_step: 1
+    name: Charge Slot 1
+    grid_options:
+      rows: auto
+      columns: 9
+    entity: input_datetime.sample_time
+  - type: custom:time-picker-card
+    hour_mode: 24
+    hour_step: 1
+    layout:
+      hour_mode: double
+      align_controls: left
+      name: header
+      embedded: true
+      thin: true
+    hide:
+      seconds: true
+      name: false
+      icon: true
+    link_values: true
+    minute_step: 1
+    name: '-'
+    grid_options:
+      rows: auto
+      columns: 9
+    entity: input_datetime.sample_time_end
+grid_options:
+  columns: 15
+  rows: auto
 ```
 
-### Fluid scroll-wheel interaction
+### Scroll-wheel interaction
 
 ![Wheel expanded while scrolling, neighboring values visible](docs/screenshots/wheel-interaction.png)
 
