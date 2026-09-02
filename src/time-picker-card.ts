@@ -37,9 +37,9 @@ function getEntityTime(entity: HassEntity): { hour: number; minute: number; seco
     : undefined;
 
   return {
-    hour: typeof entity.attributes.hour === 'number' ? entity.attributes.hour : (stateTime?.hour ?? 0),
-    minute: typeof entity.attributes.minute === 'number' ? entity.attributes.minute : (stateTime?.minute ?? 0),
-    second: typeof entity.attributes.second === 'number' ? entity.attributes.second : (stateTime?.second ?? 0),
+    hour: stateTime?.hour ?? (typeof entity.attributes.hour === 'number' ? entity.attributes.hour : 0),
+    minute: stateTime?.minute ?? (typeof entity.attributes.minute === 'number' ? entity.attributes.minute : 0),
+    second: stateTime?.second ?? (typeof entity.attributes.second === 'number' ? entity.attributes.second : 0),
   };
 }
 
