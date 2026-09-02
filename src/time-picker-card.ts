@@ -30,6 +30,19 @@ import {
 } from './types';
 import { generateWheelRange, TimeWheel } from './wheel';
 
+function getEntityTime(entity: HassEntity): { hour: number; minute: number; second: number } {
+  const stateMatch = entity.state.match(/(?:^|\s)(\d{1,2}):(\d{2})(?::(\d{2}))?(?:$|\s)/);
+  const stateTime = stateMatch
+    ? { hour: Number(stateMatch[1]), minute: Number(stateMatch[2]), second: Number(stateMatch[3] ?? 0) }
+    : undefined;
+
+  return {
+    hour: typeof entity.attributes.hour === 'number' ? entity.attributes.hour : (stateTime?.hour ?? 0),
+    minute: typeof entity.attributes.minute === 'number' ? entity.attributes.minute : (stateTime?.minute ?? 0),
+    second: typeof entity.attributes.second === 'number' ? entity.attributes.second : (stateTime?.second ?? 0),
+  };
+}
+
 console.info(
   `%c  TIME-PICKER-CARD  \n%c  Version ${CARD_VERSION}    `,
   'color: orange; font-weight: bold; background: black',
@@ -462,11 +475,11 @@ export class TimePickerCard extends HTMLElement implements LovelaceCard {
       return;
     }
 
-    const { hour, minute, second } = entity.attributes;
+    const { hour, minute, second } = getEntityTime(entity);
     this._time = new Time(
-      new Hour(hour ?? 0, this._config.hour_step, this._config.hour_mode),
-      new Minute(minute ?? 0, this._config.minute_step),
-      new Second(second ?? 0, this._config.second_step),
+      new Hour(hour, this._config.hour_step, this._config.hour_mode),
+      new Minute(minute, this._config.minute_step),
+      new Second(second, this._config.second_step),
       this._config.link_values
     );
     this._period = this._time.hour.value >= 12 ? Period.PM : Period.AM;
@@ -575,15 +588,15 @@ export class TimePickerCard extends HTMLElement implements LovelaceCard {
       return;
     }
 
-    const { hour, minute, second } = entity.attributes;
-    this._time.hour.setStringValue(String(hour ?? 0));
-    this._time.minute.setStringValue(String(minute ?? 0));
-    this._time.second.setStringValue(String(second ?? 0));
+    const { hour, minute, second } = getEntityTime(entity);
+    this._time.hour.setStringValue(String(hour));
+    this._time.minute.setStringValue(String(minute));
+    this._time.second.setStringValue(String(second));
     this._period = this._time.hour.value >= 12 ? Period.PM : Period.AM;
 
-    this._hourWheel?.setValue(this._time.hour.value);
-    this._minuteWheel?.setValue(this._time.minute.value);
-    this._secondWheel?.setValue(this._time.second.value);
+    this._hourWheel?.setValue(this._time.hour.value, 'auto');
+    this._minuteWheel?.setValue(this._time.minute.value, 'auto');
+    this._secondWheel?.setValue(this._time.second.value, 'auto');
     this._syncPeriodToggle();
 
     if (this._headerEl) {

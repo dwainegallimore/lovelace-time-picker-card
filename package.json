@@ -1,6 +1,6 @@
 {
   "name": "time-picker-card",
-  "version": "2.2.10",
+  "version": "2.2.11",
   "author": "Georgi Gardev <georgi@gardev.com>",
   "description": "Lovelace time-picker-card - a dependency-free, fluid scroll-wheel time picker",
   "keywords": [

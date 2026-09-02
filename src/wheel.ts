@@ -176,7 +176,7 @@ export class TimeWheel {
   }
 
   /** Programmatically move to a value (e.g. syncing from hass, or a carry from a neighboring wheel). */
-  setValue(value: number): void {
+  setValue(value: number, behavior: ScrollBehavior = 'smooth'): void {
     if (this.values.length === 0) {
       return;
     }
@@ -216,7 +216,7 @@ export class TimeWheel {
       return;
     }
 
-    this.scrollToRawIndex(bestIndex);
+    this.scrollToRawIndex(bestIndex, behavior);
   }
 
   focus(): void {
