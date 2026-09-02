@@ -409,6 +409,7 @@ export class TimePickerCard extends HTMLElement implements LovelaceCard {
 
   connectedCallback(): void {
     if (this._config && this._hass) {
+      this._built = false;
       this._update();
     }
   }
